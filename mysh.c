@@ -289,7 +289,8 @@ int parse_and_execute(char *command, int prev_status) {
         }
         else if (strchr(token, '<')){
             //input redirect
-            char new_input[strlen(token)-1];
+            char* new_input = malloc(strlen(token)-1);
+            //char new_input[strlen(token)-1];
             strcpy(new_input, token+1);
             
             int fd = open(new_input, O_RDONLY);
@@ -304,7 +305,8 @@ int parse_and_execute(char *command, int prev_status) {
 
         }else if (strchr(token, '>')){
             //output redirect
-            char new_output[strlen(token)-1];
+            char* new_output = malloc(strlen(token)-1);
+            //char new_output[strlen(token)-1];
             strcpy(new_output, token+1);
             
             int fd = creat(new_output,S_IRUSR|S_IWUSR|S_IRGRP);
@@ -338,7 +340,8 @@ int parse_and_execute(char *command, int prev_status) {
                 //expand_wildcards(token, args, &argc);
             }else if (strchr(token, '<')){
                 //input redirect
-                char new_input[strlen(token)-1];
+                char* new_input = malloc(strlen(token)-1);
+                //char new_input[strlen(token)-1];
                 strcpy(new_input, token+1);
                 
                 int fd = open(new_input, O_RDONLY);
@@ -353,7 +356,7 @@ int parse_and_execute(char *command, int prev_status) {
 
             }else if (strchr(token, '>')){
                 //output redirect
-                char new_output[strlen(token)-1];
+                char* new_output = malloc(strlen(token)-1);
                 strcpy(new_output, token+1);
                 
                 int fd = creat(new_output,S_IRUSR|S_IWUSR|S_IRGRP);
