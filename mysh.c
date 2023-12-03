@@ -299,7 +299,7 @@ int parse_and_execute(char *command, int prev_status) {
                 perror(new_input);
                 return EXIT_FAILURE;
             }
-            int input = fd;
+            input = fd;
             //dup2 to STDFILEIN in execute_command
             //not inlcluded in argumanet list
 
@@ -315,11 +315,13 @@ int parse_and_execute(char *command, int prev_status) {
                 perror(new_output);
                 return EXIT_FAILURE;
             }
-            int output = fd;
+            output = fd;
         }
         else {
             // Store the argument and increment the argument count
-            args[argc++] = strdup(token);
+            strcpy(args[argc], token);
+            argc++;
+            //args[argc++] = strdup(token);
         }
         token = strtok(NULL, " ");  // Get the next token
     }
@@ -350,7 +352,7 @@ int parse_and_execute(char *command, int prev_status) {
                     perror(new_input);
                     return EXIT_FAILURE;
                 }
-                int input2 = fd;
+                input2 = fd;
                 //dup2 to STDFILEIN in execute_command
                 //not inlcluded in argumanet list
 
@@ -365,11 +367,13 @@ int parse_and_execute(char *command, int prev_status) {
                     perror(new_output);
                     return EXIT_FAILURE;
                 }
-                int output2 = fd;
+                output2 = fd;
             }
             else {
                 // Store the argument and increment the argument count
-                args_pipe[argc_pipe++] = strdup(token);
+                strcpy(args_pipe[argc_pipe], token);
+                argc_pipe++;
+                //args_pipe[argc_pipe++] = strdup(token);
             }
             token = strtok(NULL, " "); 
         }
