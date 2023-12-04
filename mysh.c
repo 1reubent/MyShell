@@ -10,8 +10,6 @@
 
 #include <sys/wait.h>
 
-#include "arraylist.h"
-
 #define MAX_COMMAND_LENGTH 256 //assume no commands get cut off
 #define MAX_ARGS 12
 
@@ -105,7 +103,12 @@ int execute_command(char *argv[], int input, int output) {
             else if (pid == 0) {
                 dup2(output, STDOUT_FILENO);
                 close(output);
-                exit(print_wd());
+                //free each arg in argv
+                int status = print_wd();
+                for (int i = 0; argv[i]!=NULL; i++) {
+                    free(argv[i]);
+                }
+                exit(status);
             }else{
                 //parent
                 int status;
@@ -131,7 +134,12 @@ int execute_command(char *argv[], int input, int output) {
             else if (pid == 0) {
                 dup2(output, STDOUT_FILENO);
                 close(output);
-                exit(which_d(argv[1]));
+                //free each arg in argv
+                int status = which_d(argv[0]);
+                for (int i = 0; argv[i]!=NULL; i++) {
+                    free(argv[i]);
+                }
+                exit(status);
             }else{
                 //parent
                 int status;
@@ -161,6 +169,10 @@ int execute_command(char *argv[], int input, int output) {
             }
             if (execv(argv[0], argv) == -1) {
                 perror("execv");
+                //free args
+                for (int i = 0; argv[i]!=NULL; i++) {
+                    free(argv[i]);
+                }
                 exit(EXIT_FAILURE);
             }
         }
