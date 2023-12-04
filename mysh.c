@@ -135,7 +135,7 @@ int execute_command(char *argv[], int input, int output) {
                 dup2(output, STDOUT_FILENO);
                 close(output);
                 //free each arg in argv
-                int status = which_d(argv[0]);
+                int status = which_d(argv[1]);
                 for (int i = 0; argv[i]!=NULL; i++) {
                     free(argv[i]);
                 }
@@ -190,102 +190,166 @@ int execute_pipe_command(char *args1[], char *args2[], int in1, int out1, int in
     //if process 1 has an output redirect, process 2 has no input
     //if process 2 has an input redirect, process 1's output is just lost
     int pipe_fds[2];
-    pid_t pid1, pid2;
+    pid_t pid1 = -1;
+    pid_t pid2 = -1;
+    int status;
 
     if (pipe(pipe_fds) == -1) {
         perror("pipe");
         return EXIT_FAILURE;
     }
-
-    pid1 = fork();
-    if (pid1 == 0) {
-        // first child
-        //set up its redirects
-        if(in1 != STDIN_FILENO){
-            dup2(in1, STDIN_FILENO);
-            close(in1);
-        }
-        if(out1 != STDOUT_FILENO){
-            dup2(out1, STDOUT_FILENO);
-            close(out1);
-            //close both ends of pipe ?
-            close(pipe_fds[0]); 
-            close(pipe_fds[1]);
-        }else{
-            close(pipe_fds[0]); 
-            dup2(pipe_fds[1], STDOUT_FILENO);   //Redirects standard out to the write side of the pipe
-            close(pipe_fds[1]);
-        }
-        //catch built ins:
-        if (strcmp(args1[0], "cd") == 0) { //this does nothing because it doesnt change parent wd ...
-            exit(change_directory(args1));
-        }else if(strcmp(args1[0], "pwd") == 0){
-            exit(print_wd());
-        }
-        else if (strcmp(args1[0], "which") == 0){
-            if (args1[1] == NULL || args1[2] != NULL) {
-                fprintf(stderr, "which: Error Number of Parameters\n");
+    if (strcmp(args1[0], "cd") == 0) { //cd can't be forked b/c then it will only change dir of the child
+        status = change_directory(args1);
+    }else{
+        pid1 = fork();
+        if (pid1 == 0) {
+            // first child
+            //set up its redirects
+            if(in1 != STDIN_FILENO){
+                dup2(in1, STDIN_FILENO);
+                close(in1);
+            }
+            if(out1 != STDOUT_FILENO){
+                dup2(out1, STDOUT_FILENO);
+                close(out1);
+                //close both ends of pipe ?
+                close(pipe_fds[0]); 
+                close(pipe_fds[1]);
+            }else{
+                close(pipe_fds[0]); 
+                dup2(pipe_fds[1], STDOUT_FILENO);   //Redirects standard out to the write side of the pipe
+                close(pipe_fds[1]);
+            }
+            //catch built ins: pwd and which
+            if(strcmp(args1[0], "pwd") == 0){
+                status = print_wd();
+                //free both args2 and args2
+                for (int i = 0; args1[i]!=NULL; i++) {
+                    free(args1[i]);
+                }
+                for (int i = 0; args2[i]!=NULL; i++) {
+                    free(args2[i]);
+                }
+                exit(status);
+                //exit(print_wd());
+            }
+            else if (strcmp(args1[0], "which") == 0){
+                if (args1[1] == NULL || args1[2] != NULL) {
+                    fprintf(stderr, "which: Error Number of Parameters\n");
+                    for (int i = 0; args1[i]!=NULL; i++) {
+                        free(args1[i]);
+                    }
+                    for (int i = 0; args2[i]!=NULL; i++) {
+                        free(args2[i]);
+                    }
+                    exit(EXIT_FAILURE);
+                }
+                status = which_d(args1[1]);
+                for (int i = 0; args1[i]!=NULL; i++) {
+                    free(args1[i]);
+                }
+                for (int i = 0; args2[i]!=NULL; i++) {
+                    free(args2[i]);
+                }
+                exit(status);
+            }
+            //external command:
+            else{
+                execv(args1[0], args1);
+                perror("execv");
+                for (int i = 0; args1[i]!=NULL; i++) {
+                    free(args1[i]);
+                }
+                for (int i = 0; args2[i]!=NULL; i++) {
+                    free(args2[i]);
+                }
                 exit(EXIT_FAILURE);
             }
-            exit(which_d(args1[1]));
+            
         }
-        //external command:
-        else{
-            execv(args1[0], args1);
-            perror("execv");
-            exit(EXIT_FAILURE);
-        }
-        
     }
 
-    pid2 = fork();
-    if (pid2 == 0) {
-        // second child
-        //set up redirects
-        if(out2 != STDOUT_FILENO){
-            dup2(out2, STDOUT_FILENO);
-            close(out2);
-        }
-        if(in2 != STDIN_FILENO){
-            dup2(in2, STDIN_FILENO);
-            close(in2);
-            //close both ends of pipe ?
-            close(pipe_fds[0]); 
-            close(pipe_fds[1]);
-        }else{
-            close(pipe_fds[1]); 
-            dup2(pipe_fds[0], STDIN_FILENO);  //Redirects standard input to the read side of the pipe
-            close(pipe_fds[0]);
-        }
-        //catch built ins:
-        if (strcmp(args2[0], "cd") == 0) { //this does nothing because it doesnt change parent wd ...
-            exit(change_directory(args2));
-        }else if(strcmp(args2[0], "pwd") == 0){
-            exit(print_wd());
-        }
-        else if (strcmp(args2[0], "which") == 0){
-            if (args2[1] == NULL || args2[2] != NULL) {
-                fprintf(stderr, "which: Error Number of Parameters\n");
+    if (strcmp(args2[0], "cd") == 0) { //cd can't be forked b/c then it will only change dir of the child
+        status = change_directory(args2);
+    }else{
+        pid2 = fork();
+        if (pid2 == 0) {
+            // second child
+            //set up redirects
+            if(out2 != STDOUT_FILENO){
+                dup2(out2, STDOUT_FILENO);
+                close(out2);
+            }
+            if(in2 != STDIN_FILENO){
+                dup2(in2, STDIN_FILENO);
+                close(in2);
+                //close both ends of pipe ?
+                close(pipe_fds[0]); 
+                close(pipe_fds[1]);
+            }else{
+                close(pipe_fds[1]); 
+                dup2(pipe_fds[0], STDIN_FILENO);  //Redirects standard input to the read side of the pipe
+                close(pipe_fds[0]);
+            }
+            //catch built ins: pwd and which
+            if(strcmp(args2[0], "pwd") == 0){
+                status = print_wd();
+                //free both args2 and args2
+                for (int i = 0; args1[i]!=NULL; i++) {
+                    free(args1[i]);
+                }
+                for (int i = 0; args2[i]!=NULL; i++) {
+                    free(args2[i]);
+                }
+                exit(status);
+            }
+            else if (strcmp(args2[0], "which") == 0){
+                if (args2[1] == NULL || args2[2] != NULL) {
+                    fprintf(stderr, "which: Error Number of Parameters\n");
+                    for (int i = 0; args1[i]!=NULL; i++) {
+                        free(args1[i]);
+                    }
+                    for (int i = 0; args2[i]!=NULL; i++) {
+                        free(args2[i]);
+                    }
+                    exit(EXIT_FAILURE);
+                }
+                status = which_d(args2[1]);
+                for (int i = 0; args1[i]!=NULL; i++) {
+                    free(args1[i]);
+                }
+                for (int i = 0; args2[i]!=NULL; i++) {
+                    free(args2[i]);
+                }
+                exit(status);
+                //exit(which_d(args2[1]));
+            }
+            //external command:
+            else{
+                execv(args2[0], args2);
+                perror("execv");
+                for (int i = 0; args1[i]!=NULL; i++) {
+                    free(args1[i]);
+                }
+                for (int i = 0; args2[i]!=NULL; i++) {
+                    free(args2[i]);
+                }
                 exit(EXIT_FAILURE);
             }
-            exit(which_d(args2[1]));
-        }
-        //external command:
-        else{
-            execv(args2[0], args2);
-            perror("execv");
-            exit(EXIT_FAILURE);
         }
     }
 
     // father
     close(pipe_fds[0]);
     close(pipe_fds[1]);
-
-    int status2; //only need status of second command (the one after the pipe)
-    waitpid(pid1, NULL, 0);
-    waitpid(pid2, &status2, 0);
-    return status2;
+    if(pid1 != -1){
+        waitpid(pid1, NULL, 0);
+    }
+    if(pid2 != -1){
+        waitpid(pid2, &status, 0);
+    }
+   //only need status of second command (the one after the pipe)
+    return status;
 
 
 }
