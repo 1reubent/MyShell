@@ -11,7 +11,7 @@
 #include <sys/wait.h>
 
 #include "arraylist.h"
-#define MAX_COMMAND_LENGTH 32 //assume no commands get cut off
+#define MAX_COMMAND_LENGTH 256 //assume no commands get cut off
 #define BATCH 0
 #define INTER 1
 #define MAX_ARGS 12
@@ -98,34 +98,134 @@
 //     wait(&child_status);
 //     return child_status;
 // }
+char* name_builder(char* token){
+    //pathname OR built-in: cd, pwd, which
+    if(strchr(token, '/')!= NULL || strcmp(token, "cd") ==0 || strcmp(token, "pwd") ==0 || strcmp(token, "which") ==0){
+        return token;
+    }
+    //bare name. search for it
+    //char path[14+strlen(token)];
+    char* new_token = malloc(strlen(token)+1+1);
+    new_token[0] = '/';
+    strcpy(new_token+1, token);
+
+    char* path = malloc(14+strlen(new_token)+1);
+    strcpy(path,"/usr/local/bin");
+    strcat(path, new_token);
+    if(access(path, F_OK)==0){
+        free(new_token);
+        return path;
+    }
+    memset(path,0,strlen(path));
+    strcpy(path,"/usr/bin");
+    strcat(path, new_token);
+    if(access(path, F_OK)==0){
+        free(new_token);
+        return path;
+    }
+    memset(path,0,strlen(path));
+    strcpy(path,"/bin");
+    strcat(path, new_token);
+    if(access(path, F_OK)==0){
+        free(new_token);
+        return path;
+    }
+    free(path);
+    free(new_token);
+    return NULL;
+}
+int change_directory(char** argv){
+    if (argv[1] == NULL || argv[2] != NULL) {
+        fprintf(stderr, "cd: Error Number of Parameters\n");
+        return EXIT_FAILURE;
+    }
+    if(chdir(argv[1]) != 0) {
+        perror("cd");
+        return EXIT_FAILURE;
+    }
+    return EXIT_SUCCESS;
+}
+int print_wd(){
+    char cwd[MAX_COMMAND_LENGTH];
+    if (getcwd(cwd, MAX_COMMAND_LENGTH) != NULL) {
+        printf("%s\n", cwd);
+        return EXIT_SUCCESS;
+    } 
+    else {
+        perror("pwd");
+        return EXIT_FAILURE;
+    }
+}
+int which_d(char* fname){
+    char* path;
+    if( (path = name_builder(fname)) != NULL){
+        printf("%s\n", path);
+        free(path);
+        return EXIT_SUCCESS;
+    }
+    printf("mysh: invalid program. continuing...\n");
+    return EXIT_FAILURE;
+   
+}
+
+
 int execute_command(char *argv[], int input, int output) {
     if (strcmp(argv[0], "cd") == 0) {
+        return change_directory(argv);
         // cd command
-        if (argv[1] == NULL || argv[2] != NULL) {
-            fprintf(stderr, "cd: Error Number of Parameters\n");
-            return EXIT_FAILURE;
-        } else if (chdir(argv[1]) != 0) {
-            perror("cd");
-            return EXIT_FAILURE;
-        }
     } 
     else if (strcmp(argv[0], "pwd") == 0) {
-        // pwd command
-        char cwd[MAX_COMMAND_LENGTH];
-        if (getcwd(cwd, sizeof(cwd)) != NULL) {
-            printf("%s\n", cwd);
-        } 
-        else {
-            perror("pwd");
-            return EXIT_FAILURE;
+        if(output != STDOUT_FILENO){
+            pid_t pid = fork();
+            if (pid == -1) {
+                perror("fork");
+                return EXIT_FAILURE;
+            }
+            else if (pid == 0) {
+                dup2(output, STDOUT_FILENO);
+                close(output);
+                exit(print_wd());
+            }else{
+                //parent
+                int status;
+                waitpid(pid, &status, 0);
+                return status;
+            }
         }
+        return print_wd();
+        // pwd command
     } 
     //ALSO IMPLEMENT WHICH COMMAND
+    else if (strcmp(argv[0], "which") == 0){
+        if (argv[1] == NULL || argv[2] != NULL) {
+            fprintf(stderr, "which: Error Number of Parameters\n");
+            return EXIT_FAILURE;
+        }
+        if(output != STDOUT_FILENO){
+            pid_t pid = fork();
+            if (pid == -1) {
+                perror("fork");
+                return EXIT_FAILURE;
+            }
+            else if (pid == 0) {
+                dup2(output, STDOUT_FILENO);
+                close(output);
+                exit(which_d(argv[1]));
+            }else{
+                //parent
+                int status;
+                waitpid(pid, &status, 0);
+                return status;
+            }
+        }
+        return which_d(argv[1]);
+    }
     else {
         // external command
         pid_t pid = fork();
         if (pid == -1) {
             perror("fork");
+            return EXIT_FAILURE;
         }
         else if (pid == 0) {
             // child progress
@@ -140,7 +240,7 @@ int execute_command(char *argv[], int input, int output) {
             }
             if (execv(argv[0], argv) == -1) {
                 perror("execv");
-                return EXIT_FAILURE;
+                exit(EXIT_FAILURE);
             }
         }
         else {
@@ -170,8 +270,8 @@ int execute_pipe_command(char *args1[], char *args2[], int in1, int out1, int in
         // first child
         //set up its redirects
         if(in1 != STDIN_FILENO){
-                dup2(in1, STDIN_FILENO);
-                close(in1);
+            dup2(in1, STDIN_FILENO);
+            close(in1);
         }
         if(out1 != STDOUT_FILENO){
             dup2(out1, STDOUT_FILENO);
@@ -184,9 +284,28 @@ int execute_pipe_command(char *args1[], char *args2[], int in1, int out1, int in
             dup2(pipe_fds[1], STDOUT_FILENO);   //Redirects standard out to the write side of the pipe
             close(pipe_fds[1]);
         }
-        execv(args1[0], args1);
-        perror("execv");
-        return EXIT_FAILURE;
+        //catch built in
+        
+        if (strcmp(args1[0], "cd") == 0) { //this does nothing because it doesnt change parent wd ...
+            exit(change_directory(args1));
+            // cd command
+        }else if(strcmp(args1[0], "pwd") == 0){
+            exit(print_wd());
+        }
+        //catch which
+        else if (strcmp(args1[0], "which") == 0){
+            if (args1[1] == NULL || args1[2] != NULL) {
+                fprintf(stderr, "which: Error Number of Parameters\n");
+                exit(EXIT_FAILURE);
+            }
+            exit(which_d(args1[1]));
+        }
+        else{
+            execv(args1[0], args1);
+            perror("execv");
+            exit(EXIT_FAILURE);
+        }
+        
     }
 
     pid2 = fork();
@@ -208,10 +327,24 @@ int execute_pipe_command(char *args1[], char *args2[], int in1, int out1, int in
             dup2(pipe_fds[0], STDIN_FILENO);  //Redirects standard input to the read side of the pipe
             close(pipe_fds[0]);
         }
-
+        //catch built in
+        if (strcmp(args2[0], "cd") == 0) { //this does nothing because it doesnt change parent wd ...
+            exit(change_directory(args2));
+            // cd command
+        }else if(strcmp(args2[0], "pwd") == 0){
+            exit(print_wd());
+        }
+        //catch which
+        else if (strcmp(args2[0], "which") == 0){
+            if (args2[1] == NULL || args2[2] != NULL) {
+                fprintf(stderr, "which: Error Number of Parameters\n");
+                exit(EXIT_FAILURE);
+            }
+            exit(which_d(args2[1]));
+        }
         execv(args2[0], args2);
         perror("execv");
-        return EXIT_FAILURE;
+        exit(EXIT_FAILURE);
     }
 
     // father
@@ -225,33 +358,7 @@ int execute_pipe_command(char *args1[], char *args2[], int in1, int out1, int in
 
 
 }
-char* name_builder(char* token){
-    //pathname OR built-in: cd, pwd, which
-    if(strchr(token, '/')!= NULL || strcmp(token, "cd") ==0 || strcmp(token, "pwd") ==0 || strcmp(token, "which") ==0){
-        return token;
-    }
-    //bare name. search for it
-    //char path[14+strlen(token)];
-    char* path = malloc(14+strlen(token));
-    strcpy(path,"/usr/local/bin");
-    strcat(path, token);
-    if(access(path, F_OK)){
-        return path;
-    }
-    memset(path,0,strlen(path));
-    strcpy(path,"/usr/bin");
-    strcat(path, token);
-    if(access(path, F_OK)){
-        return path;
-    }
-    memset(path,0,strlen(path));
-    strcpy(path,"/bin");
-    strcat(path, token);
-    if(access(path, F_OK)){
-        return path;
-    }
-    return NULL;
-}
+
 //need to change this for path/program names (its argv[0] but paths?), conditionals, and redirects
 int parse_and_execute(char *command, int prev_status) {
     char *args[MAX_ARGS];           // Array to store command arguments
@@ -265,17 +372,31 @@ int parse_and_execute(char *command, int prev_status) {
     
 
     //check if first token is then or else
-    if ((strcmp(token, "then")==0 && prev_status != EXIT_SUCCESS) || (strcmp(token, "else")==0 && prev_status == EXIT_SUCCESS)) {
-      printf("mysh: error, conditional unsuccessful. continuing..\n");
-      return EXIT_FAILURE;
+    if (strcmp(token, "then")==0) {
+        if(prev_status != EXIT_SUCCESS){
+            printf("mysh: error, conditional unsuccessful. continuing..\n");
+            return EXIT_FAILURE;
+        }
+        token = strtok(NULL, " ");
+    }else if(strcmp(token, "else")==0){
+        if(prev_status == EXIT_SUCCESS){
+            printf("mysh: error, conditional unsuccessful. continuing..\n");
+            return EXIT_FAILURE;
+        }
+        token = strtok(NULL, " ");
+        //read next token
     }
 
     //build program name/path
-    if( (token = name_builder(token)) == NULL){
-        printf("mysh: invalid command. continuing...");
+    char* temp = token;
+    token = name_builder(token);
+    //free(temp);
+
+    if( token == NULL){
+        printf("mysh: invalid command. continuing...\n");
         return EXIT_FAILURE;
     }
-    token = strtok(NULL, " ");
+    //token = strtok(NULL, " ");
     // Loop through tokens while the max argument count is not exceeded
     while (token != NULL && argc < MAX_ARGS - 1) {
         if (strcmp(token, "|") == 0) {
@@ -289,7 +410,7 @@ int parse_and_execute(char *command, int prev_status) {
         }
         else if (strchr(token, '<')){
             //input redirect
-            char* new_input = malloc(strlen(token)-1);
+            char* new_input = malloc(strlen(token));
             //char new_input[strlen(token)-1];
             strcpy(new_input, token+1);
             
@@ -297,15 +418,17 @@ int parse_and_execute(char *command, int prev_status) {
             if (fd < 0) {
                 printf("ERROR\n");
                 perror(new_input);
+                free(new_input);
                 return EXIT_FAILURE;
             }
             input = fd;
+            free(new_input);
             //dup2 to STDFILEIN in execute_command
             //not inlcluded in argumanet list
 
         }else if (strchr(token, '>')){
             //output redirect
-            char* new_output = malloc(strlen(token)-1);
+            char* new_output = malloc(strlen(token));
             //char new_output[strlen(token)-1];
             strcpy(new_output, token+1);
             
@@ -313,13 +436,19 @@ int parse_and_execute(char *command, int prev_status) {
             if (fd < 0) {
                 printf("ERROR\n");
                 perror(new_output);
+                free(new_output);
                 return EXIT_FAILURE;
             }
             output = fd;
+            free(new_output);
         }
         else {
             // Store the argument and increment the argument count
+            args[argc] = malloc(MAX_COMMAND_LENGTH);
             strcpy(args[argc], token);
+            if(argc==0 && strcmp(token,temp)!=0){
+                free(token); //path that was allocated in name_builder
+            }
             argc++;
             //args[argc++] = strdup(token);
         }
@@ -334,57 +463,76 @@ int parse_and_execute(char *command, int prev_status) {
 
         //SET INPUT OF SECOND PROCESS
 
+        char* token2 = strtok(NULL, " ");
         //build program name
-        token = strtok(NULL, " ");
-        while (token != NULL && argc_pipe < MAX_ARGS - 1) {
-            if (strchr(token, '*')) {
-                // If a wildcard is found, expand it
-                //expand_wildcards(token, args, &argc);
-            }else if (strchr(token, '<')){
-                //input redirect
-                char* new_input = malloc(strlen(token)-1);
-                //char new_input[strlen(token)-1];
-                strcpy(new_input, token+1);
-                
-                int fd = open(new_input, O_RDONLY);
-                if (fd < 0) {
-                    printf("ERROR\n");
-                    perror(new_input);
-                    return EXIT_FAILURE;
+        char* temp2 = token2;
+        token2 = name_builder(token2);
+        //free(temp);
+
+        if( token2 != NULL){
+            while (token2 != NULL && argc_pipe < MAX_ARGS - 1) {
+                if (strchr(token2, '*')) {
+                    // If a wildcard is found, expand it
+                    //expand_wildcards(token, args, &argc);
+                }else if (strchr(token2, '<')){
+                    //input redirect
+                    char* new_input2 = malloc(strlen(token2));
+                    //char new_input[strlen(token)-1];
+                    strcpy(new_input2, token2+1);
+                    
+                    int fd = open(new_input2, O_RDONLY);
+                    if (fd < 0) {
+                        printf("ERROR\n");
+                        perror(new_input2);
+                        free(new_input2);
+                        return EXIT_FAILURE;
+                    }
+                    input2 = fd;
+                    free(new_input2);
+                    //dup2 to STDFILEIN in execute_command
+                    //not inlcluded in argumanet list
+
+                }else if (strchr(token2, '>')){
+                    //output redirect
+                    char* new_output2 = malloc(strlen(token2));
+                    strcpy(new_output2, token2+1);
+                    
+                    int fd = creat(new_output2,S_IRUSR|S_IWUSR|S_IRGRP);
+                    if (fd < 0) {
+                        printf("ERROR\n");
+                        perror(new_output2);
+                        free(new_output2);
+                        return EXIT_FAILURE;
+                    }
+                    output2 = fd;
+                    free(new_output2);
                 }
-                input2 = fd;
-                //dup2 to STDFILEIN in execute_command
-                //not inlcluded in argumanet list
-
-            }else if (strchr(token, '>')){
-                //output redirect
-                char* new_output = malloc(strlen(token)-1);
-                strcpy(new_output, token+1);
-                
-                int fd = creat(new_output,S_IRUSR|S_IWUSR|S_IRGRP);
-                if (fd < 0) {
-                    printf("ERROR\n");
-                    perror(new_output);
-                    return EXIT_FAILURE;
+                else {
+                    // Store the argument and increment the argument count
+                    args_pipe[argc_pipe] = malloc(MAX_COMMAND_LENGTH);
+                    strcpy(args_pipe[argc_pipe], token2);
+                    if(argc_pipe==0 && strcmp(token2,temp2)!=0){
+                        free(token2); //path that was allocated in name_builder
+                    }
+                    argc_pipe++;
+                    //args_pipe[argc_pipe++] = strdup(token);
                 }
-                output2 = fd;
+                token2 = strtok(NULL, " "); 
             }
-            else {
-                // Store the argument and increment the argument count
-                strcpy(args_pipe[argc_pipe], token);
-                argc_pipe++;
-                //args_pipe[argc_pipe++] = strdup(token);
+            args_pipe[argc_pipe] = NULL; // Set the last element to NULL for exec
+
+            prev_status = execute_pipe_command(args, args_pipe, input, output, input2, output2); // Execute the piped command
+
+            // Free dynamically allocated memory for pipe arguments
+            for (int i = 0; i < argc_pipe; i++) {
+                free(args_pipe[i]);
             }
-            token = strtok(NULL, " "); 
+        }else{
+            printf("mysh: invalid command. continuing...\n");
+            prev_status = EXIT_FAILURE;
         }
-        args_pipe[argc_pipe] = NULL; // Set the last element to NULL for exec
-
-        prev_status = execute_pipe_command(args, args_pipe, input, output, input2, output2); // Execute the piped command
-
-        // Free dynamically allocated memory for pipe arguments
-        for (int i = 0; i < argc_pipe; i++) {
-            free(args_pipe[i]);
-        }
+        
+        
     } else {
         prev_status = execute_command(args, input, output); // Execute the command if no pipe is found
     }
@@ -419,12 +567,13 @@ void batch_mode(const char *filename) {
 void interactive_mode() {
   char command[MAX_COMMAND_LENGTH];
 
-  printf("Welcome to my shell!\n");
+  printf("Welcome to my shell! Type 'exit' to quit\n");
   int prev_status = EXIT_SUCCESS;
   while (1) {
     printf("mysh> ");
     if (!fgets(command, MAX_COMMAND_LENGTH, stdin)) {
       // if get wrong command
+      printf("fgets() error\n");
       break;
     }
 
@@ -453,7 +602,7 @@ int main(int argc, char** argv){
         // interactive_mode first
         interactive_mode();
     }
-    return 0;
+    //return 0;
     //1 arg
     //     //batch mode. run each line/command as a child process, saving the exit codes. finish when you encounter exit, or EOF
     // if(argc==2){
