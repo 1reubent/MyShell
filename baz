@@ -1,1 +1,11 @@
-/usr/bin/cat
+Makefile
+arraylist.c
+arraylist.h
+bar
+baz
+foo
+mysh
+mysh.c
+mysh.o
+test
+testdir

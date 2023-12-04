@@ -19,7 +19,7 @@
 //just return original token if the program is a built-in OR already a pathname
 char* name_builder(char* token){
     //pathname OR built-in: cd, pwd, which
-    if(strchr(token, '/')!= NULL || strcmp(token, "cd") ==0 || strcmp(token, "pwd") ==0 || strcmp(token, "which") ==0){
+    if(token == NULL || strchr(token, '/')!= NULL || strcmp(token, "cd") ==0 || strcmp(token, "pwd") ==0 || strcmp(token, "which") ==0){
         return token;
     }
     //bare name. search for it
@@ -82,7 +82,7 @@ int which_d(char* fname){
         //free(path);
         return EXIT_SUCCESS;
     }
-    printf("mysh: invalid program. continuing...\n");
+    printf("mysh: invalid program.\n");
     return EXIT_FAILURE;
    
 }
@@ -293,13 +293,13 @@ int parse_and_execute(char *command, int prev_status) {
     //check if first token is then or else
     if (strcmp(token, "then")==0) {
         if(prev_status != EXIT_SUCCESS){
-            printf("mysh: error, conditional unsuccessful. continuing..\n");
+            printf("mysh: error, conditional unsuccessful.\n");
             return EXIT_FAILURE;
         }
         token = strtok(NULL, " ");
     }else if(strcmp(token, "else")==0){
         if(prev_status == EXIT_SUCCESS){
-            printf("mysh: error, conditional unsuccessful. continuing..\n");
+            printf("mysh: error, conditional unsuccessful.\n");
             return EXIT_FAILURE;
         }
         token = strtok(NULL, " ");
@@ -311,7 +311,7 @@ int parse_and_execute(char *command, int prev_status) {
     token = name_builder(token);
 
     if( token == NULL){
-        printf("mysh: invalid command. continuing...\n");
+        printf("mysh: invalid command.\n");
         return EXIT_FAILURE;
     }
     // Loop through tokens while the max argument count is not exceeded
@@ -326,8 +326,13 @@ int parse_and_execute(char *command, int prev_status) {
         }
         else if (strchr(token, '<')){
             //input redirect
-            char* new_input = malloc(strlen(token));
-            strcpy(new_input, token+1);
+            token = strtok(NULL, " ");
+            if( token == NULL){
+                printf("error: didn't specify input redirect\n");
+                return EXIT_FAILURE;
+            }
+            char* new_input = malloc(strlen(token)+1);
+            strcpy(new_input, token);
             
             int fd = open(new_input, O_RDONLY);
             if (fd < 0) {
@@ -340,8 +345,14 @@ int parse_and_execute(char *command, int prev_status) {
 
         }else if (strchr(token, '>')){
             //output redirect
-            char* new_output = malloc(strlen(token));
-            strcpy(new_output, token+1);
+            token = strtok(NULL, " ");
+            if( token == NULL){
+                printf("error: didn't specify output redirect\n");
+                return EXIT_FAILURE;
+            }
+
+            char* new_output = malloc(strlen(token)+1);
+            strcpy(new_output, token);
             
             int fd = creat(new_output,S_IRUSR|S_IWUSR|S_IRGRP);
             if (fd < 0) {
@@ -382,8 +393,13 @@ int parse_and_execute(char *command, int prev_status) {
                     //expand_wildcards(token, args, &argc);
                 }else if (strchr(token2, '<')){
                     //input redirect
-                    char* new_input2 = malloc(strlen(token2));
-                    strcpy(new_input2, token2+1);
+                    token2 = strtok(NULL, " ");
+                    if( token2 == NULL){
+                        printf("error: didn't specify input redirect\n");
+                        return EXIT_FAILURE;
+                    }
+                    char* new_input2 = malloc(strlen(token2)+1);
+                    strcpy(new_input2, token2);
                     
                     int fd = open(new_input2, O_RDONLY);
                     if (fd < 0) {
@@ -395,8 +411,13 @@ int parse_and_execute(char *command, int prev_status) {
                     free(new_input2);
                 }else if (strchr(token2, '>')){
                     //output redirect
-                    char* new_output2 = malloc(strlen(token2));
-                    strcpy(new_output2, token2+1);
+                    token2 = strtok(NULL, " ");
+                    if( token2 == NULL){
+                        printf("error: didn't specify output redirect\n");
+                        return EXIT_FAILURE;
+                    }
+                    char* new_output2 = malloc(strlen(token2)+1);
+                    strcpy(new_output2, token2);
                     
                     int fd = creat(new_output2,S_IRUSR|S_IWUSR|S_IRGRP);
                     if (fd < 0) {
@@ -428,7 +449,7 @@ int parse_and_execute(char *command, int prev_status) {
             }
         }else{
             //pipe isn't followed by a valid command
-            printf("mysh: invalid command. continuing...\n");
+            printf("mysh: invalid command.\n");
             prev_status = EXIT_FAILURE;
         }
         
@@ -445,24 +466,23 @@ int parse_and_execute(char *command, int prev_status) {
     return prev_status;
 }
 void batch_mode(const char *filename) {
-  char command[MAX_COMMAND_LENGTH];
-  FILE *file = fopen(filename, "r");
-  if (!file) {
-    perror("open file error");
-    exit(EXIT_FAILURE);
-  }
-
-  int prev_status =EXIT_SUCCESS;
-  while (fgets(command, MAX_COMMAND_LENGTH, file)) {
-    command[strcspn(command, "\n")] = 0;
-    if (strcmp(command, "exit") == 0) {
-        printf("mysh: exiting\n");
-        break;
+    char command[MAX_COMMAND_LENGTH];
+    FILE *file = fopen(filename, "r");
+    if (!file) {
+        perror("open file error");
+        exit(EXIT_FAILURE);
     }
-    prev_status = parse_and_execute(command, prev_status);
-  }
 
-  fclose(file);
+    int prev_status =EXIT_SUCCESS;
+    while (fgets(command, MAX_COMMAND_LENGTH, file)) {
+        command[strcspn(command, "\n")] = 0;
+        if (strcmp(command, "exit") == 0) {
+            //printf("mysh: exiting\n");
+            break;
+        }
+        prev_status = parse_and_execute(command, prev_status);
+    }
+    fclose(file);
 }
 void interactive_mode() {
   char command[MAX_COMMAND_LENGTH];
@@ -471,23 +491,25 @@ void interactive_mode() {
   int prev_status = EXIT_SUCCESS;
   while (1) {
     printf("mysh> ");
-    if (!fgets(command, MAX_COMMAND_LENGTH, stdin)) {
+    if (fgets(command, MAX_COMMAND_LENGTH, stdin) == NULL) {
       // if get wrong command
       printf("fgets() error\n");
       break;
     }
-
+    if(command[0] == '\n'){//no stdin
+        continue;
+    }
     // remove line break
     command[strcspn(command, "\n")] = 0;
 
     // if input 'exit', then 'exit'
     if (strcmp(command, "exit") == 0) {
-      printf("mysh: exiting\n");
       break;
     }
 
     prev_status = parse_and_execute(command, prev_status);
   }
+    printf("mysh: exiting..\n");
 }
 
 
