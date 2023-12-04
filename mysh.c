@@ -449,7 +449,7 @@ int parse_and_execute(char *command, int prev_status) {
             }
         }else{
             //pipe isn't followed by a valid command
-            printf("mysh: invalid command.\n");
+            printf("mysh: invalid command following pipe.\n");
             prev_status = EXIT_FAILURE;
         }
         

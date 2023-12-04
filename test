@@ -1,1 +1,6 @@
-/bin/mv
+A pipe connects standard input from one program to the standard output from another, allowing
+data to “flow” from one program to the next.
+echo
+Welcome to my shell! Type 'exit' to quit
+mysh> mysh> mysh> fgets() error
+mysh: exiting..
