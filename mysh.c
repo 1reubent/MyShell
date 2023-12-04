@@ -377,7 +377,7 @@ int parse_and_execute(char *command, int prev_status) {
 
         if( token2 != NULL){
             while (token2 != NULL && argc_pipe < MAX_ARGS - 1) {
-                if (strchr(token2, '*')) {
+                if (strchr(token2, '*')) { //FINISH THIS
                     // If a wildcard is found, expand it
                     //expand_wildcards(token, args, &argc);
                 }else if (strchr(token2, '<')){
