@@ -15,6 +15,8 @@
 #define MAX_COMMAND_LENGTH 256 //assume no commands get cut off
 #define MAX_ARGS 12
 
+//malloc()'s a new string that contains the full path name of token/program
+//just return original token if the program is a built-in OR already a pathname
 char* name_builder(char* token){
     //pathname OR built-in: cd, pwd, which
     if(strchr(token, '/')!= NULL || strcmp(token, "cd") ==0 || strcmp(token, "pwd") ==0 || strcmp(token, "which") ==0){
@@ -87,10 +89,12 @@ int which_d(char* fname){
 
 
 int execute_command(char *argv[], int input, int output) {
+    //cd built in
     if (strcmp(argv[0], "cd") == 0) {
         return change_directory(argv);
         // cd command
     } 
+    //pwd built in
     else if (strcmp(argv[0], "pwd") == 0) {
         if(output != STDOUT_FILENO){
             pid_t pid = fork();
@@ -112,7 +116,7 @@ int execute_command(char *argv[], int input, int output) {
         return print_wd();
         // pwd command
     } 
-    //ALSO IMPLEMENT WHICH COMMAND
+    //which built in
     else if (strcmp(argv[0], "which") == 0){
         if (argv[1] == NULL || argv[2] != NULL) {
             fprintf(stderr, "which: Error Number of Parameters\n");
@@ -137,8 +141,8 @@ int execute_command(char *argv[], int input, int output) {
         }
         return which_d(argv[1]);
     }
+    // external command
     else {
-        // external command
         pid_t pid = fork();
         if (pid == -1) {
             perror("fork");
@@ -172,7 +176,6 @@ int execute_command(char *argv[], int input, int output) {
 
 int execute_pipe_command(char *args1[], char *args2[], int in1, int out1, int in2, int out2) {
     //if process 1 has an output redirect, process 2 has no input
-
     //if process 2 has an input redirect, process 1's output is just lost
     int pipe_fds[2];
     pid_t pid1, pid2;
@@ -201,15 +204,12 @@ int execute_pipe_command(char *args1[], char *args2[], int in1, int out1, int in
             dup2(pipe_fds[1], STDOUT_FILENO);   //Redirects standard out to the write side of the pipe
             close(pipe_fds[1]);
         }
-        //catch built in
-        
+        //catch built ins:
         if (strcmp(args1[0], "cd") == 0) { //this does nothing because it doesnt change parent wd ...
             exit(change_directory(args1));
-            // cd command
         }else if(strcmp(args1[0], "pwd") == 0){
             exit(print_wd());
         }
-        //catch which
         else if (strcmp(args1[0], "which") == 0){
             if (args1[1] == NULL || args1[2] != NULL) {
                 fprintf(stderr, "which: Error Number of Parameters\n");
@@ -217,6 +217,7 @@ int execute_pipe_command(char *args1[], char *args2[], int in1, int out1, int in
             }
             exit(which_d(args1[1]));
         }
+        //external command:
         else{
             execv(args1[0], args1);
             perror("execv");
@@ -244,14 +245,12 @@ int execute_pipe_command(char *args1[], char *args2[], int in1, int out1, int in
             dup2(pipe_fds[0], STDIN_FILENO);  //Redirects standard input to the read side of the pipe
             close(pipe_fds[0]);
         }
-        //catch built in
+        //catch built ins:
         if (strcmp(args2[0], "cd") == 0) { //this does nothing because it doesnt change parent wd ...
             exit(change_directory(args2));
-            // cd command
         }else if(strcmp(args2[0], "pwd") == 0){
             exit(print_wd());
         }
-        //catch which
         else if (strcmp(args2[0], "which") == 0){
             if (args2[1] == NULL || args2[2] != NULL) {
                 fprintf(stderr, "which: Error Number of Parameters\n");
@@ -259,16 +258,19 @@ int execute_pipe_command(char *args1[], char *args2[], int in1, int out1, int in
             }
             exit(which_d(args2[1]));
         }
-        execv(args2[0], args2);
-        perror("execv");
-        exit(EXIT_FAILURE);
+        //external command:
+        else{
+            execv(args2[0], args2);
+            perror("execv");
+            exit(EXIT_FAILURE);
+        }
     }
 
     // father
     close(pipe_fds[0]);
     close(pipe_fds[1]);
 
-    int status2;
+    int status2; //only need status of second command (the one after the pipe)
     waitpid(pid1, NULL, 0);
     waitpid(pid2, &status2, 0);
     return status2;
@@ -305,53 +307,44 @@ int parse_and_execute(char *command, int prev_status) {
     }
 
     //build program name/path
-    char* temp = token;
+    char* temp = token; //later used to check if token was malloc'd or not
     token = name_builder(token);
-    //free(temp);
 
     if( token == NULL){
         printf("mysh: invalid command. continuing...\n");
         return EXIT_FAILURE;
     }
-    //token = strtok(NULL, " ");
     // Loop through tokens while the max argument count is not exceeded
     while (token != NULL && argc < MAX_ARGS - 1) {
         if (strcmp(token, "|") == 0) {
             pipe_found = 1;         // Set the pipe flag if a pipe is found
-            //SET OUTPUT OF FIRST PROCESS
             break;
         } 
-        else if (strchr(token, '*')) {
+        else if (strchr(token, '*')) { //FINISH THIS
             // If a wildcard is found, expand it
             //expand_wildcards(token, args, &argc);
         }
         else if (strchr(token, '<')){
             //input redirect
             char* new_input = malloc(strlen(token));
-            //char new_input[strlen(token)-1];
             strcpy(new_input, token+1);
             
             int fd = open(new_input, O_RDONLY);
             if (fd < 0) {
-                //printf("ERROR\n");
                 perror(new_input);
                 free(new_input);
                 return EXIT_FAILURE;
             }
             input = fd;
             free(new_input);
-            //dup2 to STDFILEIN in execute_command
-            //not inlcluded in argumanet list
 
         }else if (strchr(token, '>')){
             //output redirect
             char* new_output = malloc(strlen(token));
-            //char new_output[strlen(token)-1];
             strcpy(new_output, token+1);
             
             int fd = creat(new_output,S_IRUSR|S_IWUSR|S_IRGRP);
             if (fd < 0) {
-                //printf("ERROR\n");
                 perror(new_output);
                 free(new_output);
                 return EXIT_FAILURE;
@@ -367,24 +360,20 @@ int parse_and_execute(char *command, int prev_status) {
                 free(token); //path that was allocated in name_builder
             }
             argc++;
-            //args[argc++] = strdup(token);
         }
         token = strtok(NULL, " ");  // Get the next token
     }
-    args[argc] = NULL;              // Set the last element to NULL for exec
+    args[argc] = NULL; // Set the last element to NULL for exec
 
-    if (pipe_found) { //REDIRECTS
+    if (pipe_found) { 
         int input2 = STDIN_FILENO;
         int output2 = STDOUT_FILENO;
         // If a pipe is found, process the arguments after the pipe
 
-        //SET INPUT OF SECOND PROCESS
-
         char* token2 = strtok(NULL, " ");
         //build program name
-        char* temp2 = token2;
+        char* temp2 = token2; //later used to check if token was malloc'd or not 
         token2 = name_builder(token2);
-        //free(temp);
 
         if( token2 != NULL){
             while (token2 != NULL && argc_pipe < MAX_ARGS - 1) {
@@ -394,21 +383,16 @@ int parse_and_execute(char *command, int prev_status) {
                 }else if (strchr(token2, '<')){
                     //input redirect
                     char* new_input2 = malloc(strlen(token2));
-                    //char new_input[strlen(token)-1];
                     strcpy(new_input2, token2+1);
                     
                     int fd = open(new_input2, O_RDONLY);
                     if (fd < 0) {
-                        //printf("ERROR\n");
                         perror(new_input2);
                         free(new_input2);
                         return EXIT_FAILURE;
                     }
                     input2 = fd;
                     free(new_input2);
-                    //dup2 to STDFILEIN in execute_command
-                    //not inlcluded in argumanet list
-
                 }else if (strchr(token2, '>')){
                     //output redirect
                     char* new_output2 = malloc(strlen(token2));
@@ -416,7 +400,6 @@ int parse_and_execute(char *command, int prev_status) {
                     
                     int fd = creat(new_output2,S_IRUSR|S_IWUSR|S_IRGRP);
                     if (fd < 0) {
-                        //printf("ERROR\n");
                         perror(new_output2);
                         free(new_output2);
                         return EXIT_FAILURE;
@@ -432,7 +415,6 @@ int parse_and_execute(char *command, int prev_status) {
                         free(token2); //path that was allocated in name_builder
                     }
                     argc_pipe++;
-                    //args_pipe[argc_pipe++] = strdup(token);
                 }
                 token2 = strtok(NULL, " "); 
             }
@@ -445,6 +427,7 @@ int parse_and_execute(char *command, int prev_status) {
                 free(args_pipe[i]);
             }
         }else{
+            //pipe isn't followed by a valid command
             printf("mysh: invalid command. continuing...\n");
             prev_status = EXIT_FAILURE;
         }
