@@ -9,12 +9,14 @@
 #include <fcntl.h>
 
 #include <sys/wait.h>
+#include <glob.h>
 
 #define MAX_COMMAND_LENGTH 256 //assume no commands get cut off
 #define MAX_ARGS 12
 
 //malloc()'s a new string that contains the full path name of token/program
 //just return original token if the program is a built-in OR already a pathname
+
 char* name_builder(char* token){
     //pathname OR built-in: cd, pwd, which
     if(token == NULL || strchr(token, '/')!= NULL || strcmp(token, "cd") ==0 || strcmp(token, "pwd") ==0 || strcmp(token, "which") ==0){
@@ -351,7 +353,38 @@ int execute_pipe_command(char *args1[], char *args2[], int in1, int out1, int in
    //only need status of second command (the one after the pipe)
     return status;
 
+}
 
+char *my_strdup(const char *s) {
+    if (s == NULL) return NULL;
+
+    size_t len = strlen(s) + 1; // +1 for the null terminator
+    char *new_str = malloc(len);
+    if (new_str) {
+        memcpy(new_str, s, len); // Copy the string with the null terminator
+    }
+    return new_str;
+}
+
+
+void expand_wildcards(char *arg, char **argv, int *argc) {
+    glob_t glob_result;
+    memset(&glob_result, 0, sizeof(glob_result));
+
+    // Use glob to expand wildcards. GLOB_NOCHECK returns the pattern itself if no matches are found.
+    // GLOB_TILDE allows for tilde expansion for home directories.
+    int result = glob(arg, GLOB_NOCHECK | GLOB_TILDE, NULL, &glob_result);
+
+    if (result == 0) {
+        for (int i = 0; i < glob_result.gl_pathc && *argc < MAX_ARGS - 1; i++) {
+            // Duplicate each matched path and store in argv, incrementing argc.
+            argv[*argc] = my_strdup(glob_result.gl_pathv[i]);
+            (*argc)++;
+        }
+    }
+
+    // Free the memory allocated by glob.
+    globfree(&glob_result);
 }
 
 //need to change this for path/program names (its argv[0] but paths?), conditionals, and redirects
@@ -398,7 +431,7 @@ int parse_and_execute(char *command, int prev_status) {
         } 
         else if (strchr(token, '*')) { //FINISH THIS
             // If a wildcard is found, expand it
-            //expand_wildcards(token, args, &argc);
+            expand_wildcards(token, args, &argc);
         }
         else if (strchr(token, '<')){
             //input redirect
@@ -466,7 +499,7 @@ int parse_and_execute(char *command, int prev_status) {
             while (token2 != NULL && argc_pipe < MAX_ARGS - 1) {
                 if (strchr(token2, '*')) { //FINISH THIS
                     // If a wildcard is found, expand it
-                    //expand_wildcards(token, args, &argc);
+                    expand_wildcards(token, args, &argc);
                 }else if (strchr(token2, '<')){
                     //input redirect
                     token2 = strtok(NULL, " ");
