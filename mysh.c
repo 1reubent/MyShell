@@ -16,7 +16,6 @@
 
 //malloc()'s a new string that contains the full path name of token/program
 //just return original token if the program is a built-in OR already a pathname
-
 char* name_builder(char* token){
     //pathname OR built-in: cd, pwd, which
     if(token == NULL || strchr(token, '/')!= NULL || strcmp(token, "cd") ==0 || strcmp(token, "pwd") ==0 || strcmp(token, "which") ==0){
