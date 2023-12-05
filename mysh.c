@@ -75,10 +75,20 @@ int print_wd(){
 }
 int which_d(char* fname){
     //char* path;
-    if( (fname = name_builder(fname)) != NULL){
+    char* temp = fname;
+    fname = name_builder(fname);
+
+    if(fname != NULL){
         printf("%s\n", fname);
-        //free(path);
+        //free fname if it's a new path
+        if(strcmp(fname,temp)!=0){
+            free(fname); //path that was allocated in name_builder
+        }
+
         return EXIT_SUCCESS;
+    }
+    if(strcmp(fname,temp)!=0){
+        free(fname); //path that was allocated in name_builder
     }
     printf("mysh: invalid program.\n");
     return EXIT_FAILURE;
