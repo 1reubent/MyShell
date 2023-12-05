@@ -209,6 +209,7 @@ int execute_pipe_command(char *args1[], char *args2[], int in1, int out1, int in
         perror("pipe");
         return EXIT_FAILURE;
     }
+    
     if (strcmp(args1[0], "cd") == 0) { //cd can't be forked b/c then it will only change dir of the child
         status = change_directory(args1);
     }else{
