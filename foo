@@ -1,2 +1,2 @@
 cat bar
-echo echo
+echo echo | which ls
