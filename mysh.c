@@ -606,10 +606,10 @@ void batch_mode(const char *filename) {
 void interactive_mode() {
   char command[MAX_COMMAND_LENGTH];
 
-  printf("Welcome to my shell! Type 'exit' to quit\n");
+  printf("\nWelcome to myShell! Type 'exit' to quit. Type 'help' for more info\n");
   int prev_status = EXIT_SUCCESS;
   while (1) {
-    printf("mysh> ");
+    printf("mysh>>> ");
     if (fgets(command, MAX_COMMAND_LENGTH, stdin) == NULL) {
       // if get wrong command
       printf("fgets() error\n");
@@ -624,11 +624,14 @@ void interactive_mode() {
     // if input 'exit', then 'exit'
     if (strcmp(command, "exit") == 0) {
       break;
+    } 
+    if (strcmp(command, "help") == 0) {
+      printf("\nType 'exit' to exit.\nThis shell DOES NOT support:\n\t--tab completion\n\t--consecutive piping (only single piping)\n\t--command history (you won't be able to use the arrow keys to navigate previous commands)\n\t--directory prompt (current directory will not be shown in prompt)\n\nThis shell DOES support:\n\t--everything else :D\n\n");
+      continue;
     }
-
     prev_status = parse_and_execute(command, prev_status);
   }
-    printf("mysh: exiting..\n");
+    printf("mysh: Thank you for using myShell!\nexiting...\n...\n..\n.\n");
 }
 
 
