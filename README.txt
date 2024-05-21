@@ -1,5 +1,5 @@
 OVERVIEW:
-    MyShell is a simple linux shell emulator. To run it 'cd' in to '/MyShell' and do:
+    MyShell is a simple linux shell emulator. To run it 'cd' into '/MyShell' and do:
         % make clean
         % make
         % ./mysh
