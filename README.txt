@@ -1,12 +1,18 @@
-Name: Reuben Thomas
-netID: rmt135
+OVERVIEW:
+    MyShell is a simple linux shell emulator. To run it 'cd' in to '/MyShell' and do:
+        % make clean
+        % make
+        % ./mysh
+    
+    MyShell DOES NOT support:
+    	--tab completion
+    	--consecutive piping (only single piping)
+    	--command history (you won't be able to use the arrow keys to navigate previous commands)
+    	--directory prompt (current directory will not be shown in prompt)
 
-Name: Omer Sen
-netID: os226
+    MyShell DOES support:
+    	--everything else :D
 
-OVERVIEW: //explain batch and interactive mode
-    This program takes an input either as a text file or a directory path. All the text files inside the directories are read, and every word
-    is output with their order based on occurence count. Words with the same ocunt are ordered lexicographically.
 IMPLEMENTATION:
     We first set up argument arrays for both the current process, and a possible piped process, with respective counters. We also keep
     input and output variables to keep track of stdin and stdout for the current process.
