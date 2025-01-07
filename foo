@@ -1,2 +1,0 @@
-cat bar
-echo echo | which ls
