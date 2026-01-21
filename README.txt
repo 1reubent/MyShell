@@ -1,67 +1,146 @@
-OVERVIEW:
-    MyShell is a linux shell emulator. To run it 'cd' into '/MyShell' and do:
-        % make clean
-        % make
-        % ./mysh
-    
-    MyShell DOES NOT support:
-    	--tab completion
-    	--consecutive piping (only single piping)
-    	--command history (you won't be able to use the arrow keys to navigate previous commands)
-    	--directory prompt (current directory will not be shown in prompt)
+# MyShell
 
-    MyShell DOES support:
-    	--everything else :D
+## Overview
 
-IMPLEMENTATION:
-    We first set up argument arrays for both the current process, and a possible piped process, with respective counters. We also keep
-    input and output variables to keep track of stdin and stdout for the current process.
-    
-    PARSING
-        We split the entire command into tokens which are repeatedly read through strtok(). for each token we do the following:
-        1. CONDITIONALS
-            For only the first token, we check if it is either "else" or then". If so, we only continue if the previous status is correct.
-        2. PROGRAM NAME VALIDITY
-            Then, again only for the next token, we check if it is a valid program name by searching for it in the appropriate locations, using
-            name_builder(). If so, we build the proper pathname and continue.
-        3. PIPES, WILDCARDS, REDIRECTS, OR ARGUMENT
-            Then, for every token thereafter, we check to see if it is one of 4 things:
-                If it is a pipe, we stop parsing this process, and begin step 4.
-                If it is a wildcard, we run expand_wildcard() and add every new argument to the argument list
-                If it is an input or output redirect, we open the next token as a file, and update the input variable
-                If it's neither of these things, it is an argument and is added to the argument list
-        4. IF PIPE, REPEAT STEP 2 AND 3 FOR THE SECOND PROCESS
+**MyShell** is a Linux shell emulator.
 
-        After all of the parsing, the last argument of the argument list(s) is set to NULL. If the command is piped, execute_pipe_command() is run.
-        Otherwise, execute_command() is run. This will return an exit staus which is returned to the caller, and passed back to the parser on 
-        the next comamnd.
-    EXECUTING
-        EXECUTE_COMMAND
-            The command can either be one fo the 3 built in commands or an external command
+To run it, `cd` into `/MyShell` and execute:
 
-            If it is "cd", then we run change_directory()
-            If it is "pwd":
-                If there is an output redirect, we start a child process, set up the stdout, and run print_wd()
-                Otherwise, we just run print_wd();
-            If it is "which":
-                We make sure there is one and only one argument.
-                If there is an output redirect, we start a child process, set up the stdout, and run which_d()
-                Otherwise, we just run which_d();
-            If it's neither of these, it's an external command:
-                A child process is created, and stdout and stdin is apprpriately set up.
-                execv() is run
+```bash
+make clean
+make
+./mysh
+````
 
-            After the command is executed, and the child (if any) is returned, the function returns EXIT_SUCCESS to the parsing function.
+### Not Supported
 
-        EXECUTE_PIPE_COMMAND
-            First a pipe is established. Then for the two processes, we do the following:
-                If if the program is "cd", then we run change_directory().
-                Otherwise we begin a child process and do the follwoingg:
-                    We set the proper stdin and stdout using the pipe
-                    Then, similar to execute_command() we check if the program is "pwd" or "which", and if so we run their respective functions.
-                    Otherwise we run execv()
-            Afterwards, the parent returns the status of the second process to the parsing functoin
+MyShell **does NOT** support:
 
-    FREEING
-        We free at the end of parse_and_execute() but also in the execute functions. If we ever run a  child process, we make sure to free the dynamically
-        allocated arguments before exiting.
+* Tab completion
+* Consecutive piping (only single piping is supported)
+* Command history (arrow keys will not navigate previous commands)
+* Directory prompt (current directory is not shown in the prompt)
+
+### Supported
+
+MyShell **DOES** support:
+
+* Everything else 😄
+
+---
+
+## Implementation
+
+We first set up argument arrays for both the current process and a possible piped process, each with respective counters.
+We also maintain input and output variables to keep track of `stdin` and `stdout` for the current process.
+
+---
+
+## Parsing
+
+The entire command is split into tokens using `strtok()`. Each token is processed as follows:
+
+### 1. Conditionals
+
+* Only for the first token.
+* If the token is `"else"` or `"then"`, execution continues only if the previous status is correct.
+
+### 2. Program Name Validity
+
+* Again, only for the next token.
+* We check whether it is a valid program name by searching appropriate locations using `name_builder()`.
+* If valid, the proper pathname is built and parsing continues.
+
+### 3. Pipes, Wildcards, Redirects, or Arguments
+
+For every token thereafter, we check if it is one of the following:
+
+* **Pipe (`|`)**
+
+  * Stop parsing the current process and move to step 4.
+* **Wildcard**
+
+  * Run `expand_wildcard()` and add each expanded argument to the argument list.
+* **Input or Output Redirect**
+
+  * Open the next token as a file and update the input or output variable.
+* **Argument**
+
+  * If none of the above, the token is treated as an argument and added to the argument list.
+
+### 4. If Piped
+
+* Repeat steps 2 and 3 for the second process.
+
+After parsing:
+
+* The last argument in each argument list is set to `NULL`.
+* If the command is piped, `execute_pipe_command()` is called.
+* Otherwise, `execute_command()` is called.
+* The resulting exit status is returned to the caller and passed back to the parser for the next command.
+
+---
+
+## Executing
+
+### `execute_command`
+
+The command can be either one of three built-in commands or an external command.
+
+#### Built-in Commands
+
+* **`cd`**
+
+  * Calls `change_directory()`.
+
+* **`pwd`**
+
+  * If there is an output redirect:
+
+    * Start a child process, set up `stdout`, and run `print_wd()`.
+  * Otherwise:
+
+    * Run `print_wd()` directly.
+
+* **`which`**
+
+  * Ensures there is exactly one argument.
+  * If there is an output redirect:
+
+    * Start a child process, set up `stdout`, and run `which_d()`.
+  * Otherwise:
+
+    * Run `which_d()` directly.
+
+#### External Commands
+
+* A child process is created.
+* `stdin` and `stdout` are set up appropriately.
+* `execv()` is executed.
+
+After execution:
+
+* Once the child process (if any) returns, the function returns `EXIT_SUCCESS` to the parsing function.
+
+---
+
+### `execute_pipe_command`
+
+* A pipe is established.
+* For each of the two processes:
+
+  * If the program is `cd`, `change_directory()` is run.
+  * Otherwise:
+
+    * A child process is created.
+    * Proper `stdin` and `stdout` are set up using the pipe.
+    * If the program is `pwd` or `which`, their respective functions are called.
+    * Otherwise, `execv()` is run.
+* The parent process returns the status of the second process to the parsing function.
+
+---
+
+## Freeing
+
+* Memory is freed at the end of `parse_and_execute()` and also within the execute functions.
+* If a child process is created, dynamically allocated arguments are freed before exiting.
